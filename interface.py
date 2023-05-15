@@ -33,14 +33,13 @@ def local_to_global_direction(rotation_matrix, local_movement):
 
 MOCK=True
 class DataFrame:
-    def __init__(self,acel=None,gyro=None,orientation=None,pressure=None,mag=None,timestamp=None) -> None:
-        self.acel:tuple[float,float,float]=acel
-        self.gyro:tuple[float,float,float]=gyro
-        self.orientation:tuple[float,float,float]=orientation
-        self.pressure:tuple[float,]=pressure,
-        self.mag:tuple[float,float,float]=mag
-        self.timestamp:datetime=timestamp
-
+    def __init__(self, acel=None, gyro=None, orientation=None, pressure=None, mag=None, timestamp=None) -> None:
+        self.acel: np.ndarray = np.array(acel) if acel is not None else None
+        self.gyro: np.ndarray = np.deg2rad(np.array(gyro)) if gyro is not None else None
+        self.orientation: np.ndarray = np.array(orientation) if orientation is not None else None
+        self.pressure: np.ndarray = np.array(pressure) if pressure is not None else None
+        self.mag: np.ndarray = np.array(mag) if mag is not None else None
+        self.timestamp: datetime = timestamp
 
 class BaseApp(tk.Tk):
     def __init__(
@@ -101,54 +100,52 @@ class BaseApp(tk.Tk):
         self.plot_data=[]
         self.acc_data=[]
         self.vel_data=[]
+        self.plot_orientation=[]
         
         self.index=0
         self.baseline={
-            "gyro":[0,0,0],
-            "orientation":[0,0,0],
-            "mag":[0,0,0],
-            "acel":[0,0,0],
-            "pressure":[0,]
+            "gyro":np.array([0,0,0]),
+            "orientation":np.array([0,0,0]),
+            "mag":np.array([0,0,0]),
+            "acel":np.array([0,0,0]),
+            "pressure":np.array([0])
         }
         self.calibration_running=False
         self.last_update=None
-        self.vel=[0,0,0]
-        self.pos=[0,0,0]
-        self.acc=[0,0,0]
+        self.vel=np.array([0,0,0])
+        self.pos=np.array([0,0,0])
+        self.acc=np.array([0,0,0])
         self.plot_data.append(self.pos)
+        self.plot_orientation.append(np.array([0,0,0]))
         self.acc_data.append(self.acc)
         self.vel_data.append(self.vel)
         self.readings:list[DataFrame]=[]
         self.start=None
         #self.sense = SenseHat()
     
-    def calibrate_sensor(self,samples=50):
-        def list_sum(l1,l2):
-            return [sum(x) for x in zip(l1, l2)]
-        i=0
+    def calibrate_sensor(self, samples=50):
+        i = 0
         self.baseline={
-            "gyro":[0,0,0],
-            "orientation":[0,0,0],
-            "mag":[0,0,0],
-            "acel":[0,0,0],
-            "pressure":[0]
+            "gyro": np.zeros(3),
+            "orientation": np.zeros(3),
+            "mag": np.zeros(3),
+            "acel": np.zeros(3),
+            "pressure": np.zeros(1)
         }
         while True:
-            if i>=samples:
+            if i >= samples:
                 break
-            df=self.get_sensor_data()
+            df = self.get_sensor_data()
             
-            self.baseline["gyro"]=list_sum(self.baseline["gyro"],df.gyro)
-            self.baseline["orientation"]=list_sum(self.baseline["orientation"],df.orientation)
-            self.baseline["mag"]=list_sum(self.baseline["mag"],df.mag)
-            self.baseline["acel"]=list_sum(self.baseline["acel"],df.acel)
-            self.baseline["pressure"]=list_sum(self.baseline["pressure"],df.pressure)
+            self.baseline["gyro"] += np.array(df.gyro)
+            self.baseline["orientation"] += np.array(df.orientation)
+            self.baseline["mag"] += np.array(df.mag)
+            self.baseline["acel"] += np.array(df.acel)
+            self.baseline["pressure"] += np.array(df.pressure)
             
-            
-            i+=1
+            i += 1
         for key in self.baseline.keys():
-            for index in range(len(self.baseline[key])):
-                self.baseline[key][index]/=i
+            self.baseline[key] /= i
         self.status_label.set("calibration is done")
         print("calibration is done")
         pass
@@ -185,6 +182,7 @@ class BaseApp(tk.Tk):
     
     def update_map(self):
         self.map.plot(*zip(*self.plot_data))
+        #self.map.quiver
         self.map_fig.canvas.draw_idle()
         #print(self.acc_data)
         for i in range(3):
@@ -210,7 +208,7 @@ class BaseApp(tk.Tk):
             self.start=datetime.now()
         df=self.get_sensor_data()
         self.readings.append(df)
-        if (datetime.now()-self.start).total_seconds()>=15:
+        if (datetime.now()-self.start).total_seconds()>=40:
             self.start=None
             self.status_label.set("recording is done")
             print("recording is done")
@@ -221,38 +219,42 @@ class BaseApp(tk.Tk):
     def process(self):
         self.status_label.set("plotting starting")
         print("plotting starting")
-        def list_sub(a,b):
-            return [a_i - b_i for a_i, b_i in zip(a, b)]
-        def list_sum(l1,l2):
-            return [sum(x) for x in zip(l1, l2)]
-        #print(self.pos)
-        threshold=0.005
+        
+        threshold = 0.001
         
         for i in range(len(self.readings)):
-            df=self.readings[i]
-            if i==0:
-                delta_t=0
+            df = self.readings[i]
+            
+            if i == 0:
+                delta_t = 0
             else:
-                delta_t=(self.readings[i].timestamp-self.readings[i-1].timestamp).total_seconds()
-            acc=list_sub(df.acel,self.baseline["acel"])
-            if abs(acc[0])<threshold:
-                acc[0]=0
-            if abs(acc[1])<threshold:
-                acc[1]=0
-            if abs(acc[2])<threshold:
-                acc[2]=0
-            acc=[x* 9.80665 for x in acc]
-            self.acc=acc
-            vel=list_sum(self.vel,[x*delta_t for x in acc])
-            self.vel=vel
-            pos=list_sum(self.pos,[x*delta_t for x in vel])
-            self.pos=pos
+                delta_t = (self.readings[i].timestamp - self.readings[i - 1].timestamp).total_seconds()
+            
+            acc = df.acel- self.baseline["acel"]
+            
+            acc[abs(acc) < threshold] = 0
+            acc *= 9.80665
+            
+            #fix for orientation
+            rotation_matrix=euler_angles_to_rotation_matrix(df.orientation[2],df.orientation[1],df.orientation[0])
+            corrected_acc=local_to_global_direction(rotation_matrix,acc.reshape((3,1)))
+            
+            acc=corrected_acc.reshape((1,3))[0]
+            
+            self.acc = acc
+            
+            vel = self.vel + acc * delta_t
+            self.vel = vel
+            
+            pos = self.pos + vel * delta_t
+            self.pos = pos
+            
+            self.plot_orientation.append(df.orientation)
             self.plot_data.append(self.pos)
             self.vel_data.append(self.vel)
             self.acc_data.append(self.acc)
-            #print(f"acc: {acc},vel: {vel},pos {pos}")
+            
         self.update_map()
-        pass
         
 
 def main():
