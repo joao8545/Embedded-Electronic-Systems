@@ -1,7 +1,6 @@
 from datetime import datetime
 import time
 from sense_hat import SenseHat
-from evdev import InputDevice, categorize, ecodes,list_devices
 from select import select
 from threading import Thread
 
@@ -22,6 +21,7 @@ LOG_AT_START = False
 
 def file_setup(filename):
     header =[]
+    header.append("index")
     header.append("timestamp")
     if TEMP_H:
         header.append("temp_h")
@@ -45,9 +45,10 @@ def file_setup(filename):
 
 
 ## Function to collect data from the sense hat and build a string
-def get_sense_data():
+def get_sense_data(index=0):
     sense_data=[]
 
+    sense_data.append(index)
     sense_data.append(datetime.now())
     if TEMP_H:
         sense_data.append(sense.get_temperature_from_humidity())
@@ -77,7 +78,7 @@ def get_sense_data():
         gyro_x,gyro_y,gyro_z = sense.get_gyroscope_raw().values()
         sense_data.extend([gyro_x,gyro_y,gyro_z])
 
-
+    print(sense_data)
     return sense_data
 
 def show_state(logging):
@@ -86,20 +87,6 @@ def show_state(logging):
     else:
         sense.show_letter("!",text_colour=[100,0,0])
 
-def check_input():
-    running = True
-    logging_event = False
-    r, w, x = select([dev.fd], [], [],0.01)
-    for fd in r:
-        for event in dev.read():
-            if event.type == ecodes.EV_KEY and event.value == 1:
-                logging_event = True
-                if event.code == ecodes.KEY_UP:
-                    running = False
-                
-
-
-    return logging_event,running
 
 def log_data():
     output_string = ",".join(str(value) for value in sense_data)
@@ -117,7 +104,6 @@ sense = SenseHat()
 run=True
 logging=LOG_AT_START
 show_state(logging)
-dev = get_joystick()
 batch_data= []
 
 if BASENAME == "":
@@ -125,24 +111,22 @@ if BASENAME == "":
 else:
     filename = BASENAME+"-"+str(datetime.now())+".csv"
 
+
+
+BASENAME ="200 settling  and multiple measurements"
+filename = BASENAME+".csv"
+
 file_setup(filename)
 
-if DELAY > 0:
-    Thread(target= timed_log).start()
-
+i=1
 
 
 while run==True:
-    sense_data = get_sense_data()
+	
+    sense_data = get_sense_data(i)
+    i+=1
 
-    logging_event,run = check_input()
-
-    if logging_event:
-        logging = not(logging)
-        show_state(logging)
-
-    if logging == True and DELAY == 0:
-        log_data()
+    log_data()
 
     if len(batch_data) >= WRITE_FREQUENCY:
         with open(filename,"a") as f:
@@ -150,11 +134,6 @@ while run==True:
                 f.write(line + "\n")
             batch_data = []
 
-
-with open(filename,"a") as f:
-    for line in batch_data:
-        f.write(line + "\n")
-        batch_data = []
 
 
 sense.clear()
