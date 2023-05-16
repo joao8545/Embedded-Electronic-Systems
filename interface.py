@@ -177,33 +177,44 @@ class BaseApp(tk.Tk):
         if not MOCK:
             self.sense = SenseHat()
     
-    def calibrate_sensor(self, samples=50):
-        i = 0
-        self.baseline={
-            "gyro": np.zeros(3),
-            "orientation": np.zeros(3),
-            "mag": np.zeros(3),
-            "acel": np.zeros(3),
-            "pressure": np.zeros(1)
-        }
-        while True:
-            if i >= samples:
-                break
-            df = self.get_sensor_data()
+    def calibrate_sensor(self, samples=500):
+        if not self.calibration_running:
+            self.status_label.set("calibration is starting")
+            print("calibration is starting")
+            self.calibration_running = True
+            self.i = 0
+            self.baseline = {
+                "gyro": np.zeros(3),
+                "orientation": np.zeros(3),
+                "mag": np.zeros(3),
+                "acel": np.zeros(3),
+                "pressure": np.zeros(1)
+            }
+            self.continue_calibration(samples)
+        else:
+            self.calibration_running = False
+
+    def continue_calibration(self,samples=50):
+        if (self.i >= samples and MOCK) or not self.calibration_running :
+            for key in self.baseline.keys():
+                self.baseline[key] /= self.i
+            self.status_label.set(f"calibration is done with {self.i} samples")
+            print(f"calibration is done with {self.i} samples")
             
-            self.baseline["gyro"] += np.array(df.gyro)
-            self.baseline["orientation"] += np.array(df.orientation)
-            self.baseline["mag"] += np.array(df.mag)
-            self.baseline["acel"] += np.array(df.acel)
-            self.baseline["pressure"] += np.array(df.pressure)
-            
-            i += 1
-        for key in self.baseline.keys():
-            self.baseline[key] /= i
-        self.status_label.set("calibration is done")
-        print("calibration is done")
-        pass
-    
+            return
+
+        df = self.get_sensor_data()
+
+        self.baseline["gyro"] += np.array(df.gyro)
+        self.baseline["orientation"] += np.array(df.orientation)
+        self.baseline["mag"] += np.array(df.mag)
+        self.baseline["acel"] += np.array(df.acel)
+        self.baseline["pressure"] += np.array(df.pressure)
+
+        self.i += 1
+        self.after(1,self.continue_calibration,samples)
+
+        
     def get_sensor_data(self):
         if MOCK:
             self.index+=1
@@ -231,6 +242,7 @@ class BaseApp(tk.Tk):
                 p=(float(line[3]))
                 m=(float(line[7]),float(line[8]),float(line[9]))
                 t=datetime.strptime(line[0],'%Y-%m-%d %H:%M:%S.%f')
+                i=None
             elif len(line)==17:
                 a=(float(line[11]),float(line[12]),float(line[13]))
                 g=(float(line[14]),float(line[15]),float(line[16]))
