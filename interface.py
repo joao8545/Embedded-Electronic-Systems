@@ -5,6 +5,8 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolb
 from matplotlib.figure import Figure
 import time
 from datetime import datetime
+from scipy.ndimage import uniform_filter1d
+from collections import namedtuple
 #from sense_hat import SenseHat
 
 def euler_angles_to_rotation_matrix(roll, pitch, yaw):
@@ -41,6 +43,55 @@ class DataFrame:
         self.mag: np.ndarray = np.array(mag) if mag is not None else None
         self.timestamp: datetime = timestamp
 
+def movmean(A,k):
+        return uniform_filter1d(A,k)
+    
+
+def filter_readings(readings,k):
+    concatenated_arrays = {}
+
+    # Iterate over each DataFrame in readings
+    for df in readings:
+        # Iterate over each attribute in the DataFrame
+        for attr_name, attr_value in df.__dict__.items():
+            # Skip the 'timestamp' attribute
+            if not isinstance(attr_value, np.ndarray):
+                continue
+            if attr_name == 'timestamp':
+                print("should not get here")
+                continue
+            
+            # Check if the attribute is None or an empty array
+            if attr_value is None or len(attr_value) == 0:
+                continue
+            
+            # Concatenate the column array to the existing array for the attribute
+            if attr_name in concatenated_arrays:
+                concatenated_arrays[attr_name] = np.concatenate((concatenated_arrays[attr_name], attr_value))
+            else:
+                concatenated_arrays[attr_name] = attr_value.copy()
+    # Initialize an empty list to store the filtered DataFrames
+    filtered_list = []
+    filtered_arrays={}
+
+    # Iterate over the keys and arrays in concatenated_arrays
+    for key, array in concatenated_arrays.items():
+        # Apply movmean to the array
+        filtered_array = movmean(array, k)
+        filtered_arrays[key]=filtered_array
+    
+    TupleClass = namedtuple('TupleClass', filtered_arrays.keys())
+    object_list = [TupleClass(*values) for values in zip(*data_dict.values())]
+    
+    for obj in object_list:
+        filtered_list.append(DataFrame(**obj._asdict()))
+    
+    return filtered_list
+    '''
+    for key, value in df.__dict__.items():
+        if isinstance(value, np.ndarray):
+            setattr(df, key, movmean(value))
+    '''     
 class BaseApp(tk.Tk):
     def __init__(
         self,
@@ -221,8 +272,8 @@ class BaseApp(tk.Tk):
         print("plotting starting")
         
         threshold = 0.001
-        
-        for i in range(len(self.readings)):
+        readings=filter_readings(self.readings)
+        for i in range(1,len(readings)):
             df = self.readings[i]
             
             if i == 0:
