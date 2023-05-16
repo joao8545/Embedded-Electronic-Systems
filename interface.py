@@ -7,7 +7,11 @@ import time
 from datetime import datetime
 from scipy.ndimage import uniform_filter1d
 from collections import namedtuple
-#from sense_hat import SenseHat
+
+MOCK=True
+#MOCK=False
+if not MOCK:
+    from sense_hat import SenseHat
 
 def euler_angles_to_rotation_matrix(roll, pitch, yaw):
     R_x = np.array([[1, 0, 0],
@@ -33,15 +37,15 @@ def local_to_global_direction(rotation_matrix, local_movement):
     return global_direction
 
 
-MOCK=True
 class DataFrame:
-    def __init__(self, acel=None, gyro=None, orientation=None, pressure=None, mag=None, timestamp=None) -> None:
+    def __init__(self, acel=None, gyro=None, orientation=None, pressure=None, mag=None, timestamp=None,index=None) -> None:
         self.acel: np.ndarray = np.array(acel) if acel is not None else None
         self.gyro: np.ndarray = np.deg2rad(np.array(gyro)) if gyro is not None else None
         self.orientation: np.ndarray = np.array(orientation) if orientation is not None else None
         self.pressure: np.ndarray = np.array(pressure) if pressure is not None else None
         self.mag: np.ndarray = np.array(mag) if mag is not None else None
         self.timestamp: datetime = timestamp
+        self.index=index
 
 def movmean(A,k):
         return uniform_filter1d(A,k)
@@ -170,7 +174,8 @@ class BaseApp(tk.Tk):
         self.vel_data.append(self.vel)
         self.readings:list[DataFrame]=[]
         self.start=None
-        #self.sense = SenseHat()
+        if not MOCK:
+            self.sense = SenseHat()
     
     def calibrate_sensor(self, samples=50):
         i = 0
@@ -219,13 +224,22 @@ class BaseApp(tk.Tk):
     def mock_sensor(self,file_path,index)->DataFrame:
         with open(file_path,"r") as fp:
             line=fp.readlines()[index].split(",")
-            a=(float(line[10]),float(line[11]),float(line[12]))
-            g=(float(line[13]),float(line[14]),float(line[15]))
-            o=(float(line[4]),float(line[5]),float(line[6]))
-            p=(float(line[3]))
-            m=(float(line[7]),float(line[8]),float(line[9]))
-            t=datetime.strptime(line[0],'%Y-%m-%d %H:%M:%S.%f')
-            data_frame=DataFrame(a,g,o,p,m,t)
+            if len(line)==16:
+                a=(float(line[10]),float(line[11]),float(line[12]))
+                g=(float(line[13]),float(line[14]),float(line[15]))
+                o=(float(line[4]),float(line[5]),float(line[6]))
+                p=(float(line[3]))
+                m=(float(line[7]),float(line[8]),float(line[9]))
+                t=datetime.strptime(line[0],'%Y-%m-%d %H:%M:%S.%f')
+            elif len(line)==17:
+                a=(float(line[11]),float(line[12]),float(line[13]))
+                g=(float(line[14]),float(line[15]),float(line[16]))
+                o=(float(line[5]),float(line[6]),float(line[7]))
+                p=(float(line[4]))
+                m=(float(line[8]),float(line[9]),float(line[10]))
+                t=datetime.strptime(line[1],'%Y-%m-%d %H:%M:%S.%f')
+                i=int(line[0])
+            data_frame=DataFrame(a,g,o,p,m,t,i)
         return data_frame
         pass
     
@@ -257,7 +271,7 @@ class BaseApp(tk.Tk):
             self.start=datetime.now()
         df=self.get_sensor_data()
         self.readings.append(df)
-        if (datetime.now()-self.start).total_seconds()>=3:
+        if (datetime.now()-self.start).total_seconds()>=15:
             self.start=None
             self.status_label.set("recording is done")
             print("recording is done")
@@ -268,9 +282,16 @@ class BaseApp(tk.Tk):
     def process(self):
         self.status_label.set("plotting starting")
         print("plotting starting")
+        # reseting readings
+        self.vel=np.array([0,0,0])
+        self.pos=np.array([0,0,0])
+        self.acc=np.array([0,0,0])
+        self.plot_data.append(self.pos)
+        self.plot_orientation.append(np.array([0,0,0]))
         
-        threshold = 0.001
+        threshold = 0.005
         readings=filter_readings(self.readings)
+        readings=self.readings
         for i in range(1,len(readings)):
             df = readings[i]
             
