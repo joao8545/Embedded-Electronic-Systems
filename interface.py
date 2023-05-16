@@ -241,14 +241,14 @@ class BaseApp(tk.Tk):
             
             acc=corrected_acc.reshape((1,3))[0]
             
+            #velocityx[1] = velocityx[0] + accelerationx[0] + ((accelerationx[1] - accelerationx[0])>>1)
+            vel = self.vel +self.acc + (acc-self.acc)/2 * delta_t
+            
+            pos = self.pos +self.vel + (vel-self.vel)/2 * delta_t
+            
             self.acc = acc
-            
-            vel = self.vel + acc * delta_t
             self.vel = vel
-            
-            pos = self.pos + vel * delta_t
             self.pos = pos
-            
             self.plot_orientation.append(df.orientation)
             self.plot_data.append(self.pos)
             self.vel_data.append(self.vel)
