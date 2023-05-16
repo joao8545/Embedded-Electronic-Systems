@@ -47,9 +47,9 @@ def movmean(A,k):
         return uniform_filter1d(A,k)
     
 
-def filter_readings(readings,k):
+def filter_readings(readings,k=5):
     concatenated_arrays = {}
-
+    
     # Iterate over each DataFrame in readings
     for df in readings:
         # Iterate over each attribute in the DataFrame
@@ -57,19 +57,20 @@ def filter_readings(readings,k):
             # Skip the 'timestamp' attribute
             if not isinstance(attr_value, np.ndarray):
                 continue
-            if attr_name == 'timestamp':
+            if attr_name == 'timestamp' :
                 print("should not get here")
                 continue
-            
+            if attr_name=="pressure":
+                continue
             # Check if the attribute is None or an empty array
             if attr_value is None or len(attr_value) == 0:
                 continue
             
             # Concatenate the column array to the existing array for the attribute
             if attr_name in concatenated_arrays:
-                concatenated_arrays[attr_name] = np.concatenate((concatenated_arrays[attr_name], attr_value))
+                concatenated_arrays[attr_name].append( attr_value)
             else:
-                concatenated_arrays[attr_name] = attr_value.copy()
+                concatenated_arrays[attr_name] = [attr_value]
     # Initialize an empty list to store the filtered DataFrames
     filtered_list = []
     filtered_arrays={}
@@ -77,21 +78,18 @@ def filter_readings(readings,k):
     # Iterate over the keys and arrays in concatenated_arrays
     for key, array in concatenated_arrays.items():
         # Apply movmean to the array
-        filtered_array = movmean(array, k)
+        #need working
+        filtered_array = np.transpose(np.array([movmean(el, 2) for el in np.transpose(array)]))
         filtered_arrays[key]=filtered_array
     
     TupleClass = namedtuple('TupleClass', filtered_arrays.keys())
-    object_list = [TupleClass(*values) for values in zip(*data_dict.values())]
+    object_list = [TupleClass(*values) for values in zip(*filtered_arrays.values())]
     
     for obj in object_list:
         filtered_list.append(DataFrame(**obj._asdict()))
     
     return filtered_list
-    '''
-    for key, value in df.__dict__.items():
-        if isinstance(value, np.ndarray):
-            setattr(df, key, movmean(value))
-    '''     
+
 class BaseApp(tk.Tk):
     def __init__(
         self,
@@ -259,7 +257,7 @@ class BaseApp(tk.Tk):
             self.start=datetime.now()
         df=self.get_sensor_data()
         self.readings.append(df)
-        if (datetime.now()-self.start).total_seconds()>=40:
+        if (datetime.now()-self.start).total_seconds()>=3:
             self.start=None
             self.status_label.set("recording is done")
             print("recording is done")
@@ -274,7 +272,7 @@ class BaseApp(tk.Tk):
         threshold = 0.001
         readings=filter_readings(self.readings)
         for i in range(1,len(readings)):
-            df = self.readings[i]
+            df = readings[i]
             
             if i == 0:
                 delta_t = 0
