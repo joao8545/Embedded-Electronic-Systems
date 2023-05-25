@@ -90,9 +90,10 @@ def filter_readings(readings,k=5):
     TupleClass = namedtuple('TupleClass', filtered_arrays.keys())
     object_list = [TupleClass(*values) for values in zip(*filtered_arrays.values())]
     
-    for obj in object_list:
-        filtered_list.append(DataFrame(**obj._asdict()))
+    for i,obj in enumerate(object_list):
+        filtered_list.append(DataFrame(**obj._asdict(),timestamp=readings[i].timestamp))
     
+    print(filtered_list[0].timestamp)
     return filtered_list
 
 class BaseApp(tk.Tk):
@@ -252,7 +253,9 @@ class BaseApp(tk.Tk):
                 m=(float(line[8]),float(line[9]),float(line[10]))
                 t=datetime.strptime(line[1],'%Y-%m-%d %H:%M:%S.%f')
                 i=int(line[0])
+            #print(t)
             data_frame=DataFrame(a,g,o,p,m,t,i)
+            #print(data_frame.timestamp.second)
         return data_frame
         pass
     
@@ -306,8 +309,9 @@ class BaseApp(tk.Tk):
         self.plot_data.append(self.pos)
         self.plot_orientation.append(np.array([0,0,0]))
         
+        
         threshold = 0.005
-        readings=filter_readings(self.readings)
+        readings:list[DataFrame]=filter_readings(self.readings)
         #readings=self.readings
         for i in range(1,len(readings)):
             df = readings[i]
@@ -347,8 +351,10 @@ class BaseApp(tk.Tk):
             self.vel_data.append(self.vel)
             self.acc_data.append(self.acc)
         print(len(self.plot_data),len(self.vel_data),len(self.acc_data))
+        print(readings[0].timestamp)
         self.readings=[]
         self.update_map()
+        self.status_label.set(f"avg time={(readings[-1].timestamp-readings[0].timestamp).total_seconds()/len(readings)} s")
         
 
 def main():
