@@ -8,6 +8,7 @@ from datetime import datetime
 from scipy.ndimage import uniform_filter1d
 from collections import namedtuple
 
+FILEPATH="data\/up-down after 200.csv"
 MOCK=True
 #MOCK=False
 if not MOCK:
@@ -115,6 +116,7 @@ class BaseApp(tk.Tk):
         ax.set_ylabel("y")
         ax.set_zlabel("z")
         self.map=ax
+        
 
         toolbar = NavigationToolbar2Tk(canvas, self)
         canvas.get_tk_widget().pack(side=tk.LEFT, fill=tk.BOTH, expand=1)
@@ -177,7 +179,7 @@ class BaseApp(tk.Tk):
         if not MOCK:
             self.sense = SenseHat()
     
-    def calibrate_sensor(self, samples=500):
+    def calibrate_sensor(self, samples=200):
         if not self.calibration_running:
             self.status_label.set("calibration is starting")
             print("calibration is starting")
@@ -213,12 +215,11 @@ class BaseApp(tk.Tk):
 
         self.i += 1
         self.after(1,self.continue_calibration,samples)
-
-        
+       
     def get_sensor_data(self):
         if MOCK:
             self.index+=1
-            return self.mock_sensor("data\Fall-2023-05-09 15_57_58.164932.csv",self.index)
+            return self.mock_sensor(FILEPATH,self.index)
         return self.read_sensor()
         pass
     
@@ -256,10 +257,14 @@ class BaseApp(tk.Tk):
         pass
     
     def update_map(self):
-        self.map.plot(*zip(*self.plot_data))
-        #self.map.quiver
+        self.map.cla()
+        #self.map.plot(*zip(*self.plot_data))
+        self.map.quiver(*zip(*self.plot_data),*zip(*self.plot_orientation),normalize=True,pivot="middle",length=10)
         self.map_fig.canvas.draw_idle()
         #print(self.acc_data)
+        for i in range(3):
+            for j in range(3):
+                self.graphs[i][j][1].cla()
         for i in range(3):
         
             self.graphs[i][0][1].plot([t[i] for t in self.acc_data])
@@ -270,10 +275,6 @@ class BaseApp(tk.Tk):
                 self.graphs[i][j][0].canvas.draw_idle()
         self.status_label.set("plotting is done")
         print("plotting is done")   
-        pass
-    
-    
-    def calculate_orientation(self):
         pass
     
     def record(self):
@@ -298,12 +299,16 @@ class BaseApp(tk.Tk):
         self.vel=np.array([0,0,0])
         self.pos=np.array([0,0,0])
         self.acc=np.array([0,0,0])
+        self.acc_data=[]
+        self.vel_data=[]
+        self.plot_data=[]
+        self.plot_orientation=[]
         self.plot_data.append(self.pos)
         self.plot_orientation.append(np.array([0,0,0]))
         
         threshold = 0.005
         readings=filter_readings(self.readings)
-        readings=self.readings
+        #readings=self.readings
         for i in range(1,len(readings)):
             df = readings[i]
             
@@ -324,18 +329,25 @@ class BaseApp(tk.Tk):
             acc=corrected_acc.reshape((1,3))[0]
             
             #velocityx[1] = velocityx[0] + accelerationx[0] + ((accelerationx[1] - accelerationx[0])>>1)
-            vel = self.vel +self.acc + (acc-self.acc)/2 * delta_t
+            vel = self.vel +self.acc + ((acc-self.acc)/2) * delta_t
             
-            pos = self.pos +self.vel + (vel-self.vel)/2 * delta_t
+            pos = self.pos +self.vel + ((vel-self.vel)/2) * delta_t
             
             self.acc = acc
             self.vel = vel
             self.pos = pos
-            self.plot_orientation.append(df.orientation)
+            
+            u = np.cos(df.orientation[0]) * np.cos(df.orientation[1])
+            v = (np.cos(df.orientation[2]) * np.sin(df.orientation[1]) + np.sin(df.orientation[2]) * np.sin(df.orientation[0]) * np.cos(df.orientation[1]))
+            w = (-1*np.sin(df.orientation[2]) * np.sin(df.orientation[1]) + np.cos(df.orientation[2]) * np.sin(df.orientation[0]) * np.cos(df.orientation[1]))
+            
+            self.plot_orientation.append([u,v,w])
+            #self.plot_orientation.append([df.orientation[2],df.orientation[1],df.orientation[0]])
             self.plot_data.append(self.pos)
             self.vel_data.append(self.vel)
             self.acc_data.append(self.acc)
-            
+        print(len(self.plot_data),len(self.vel_data),len(self.acc_data))
+        self.readings=[]
         self.update_map()
         
 
